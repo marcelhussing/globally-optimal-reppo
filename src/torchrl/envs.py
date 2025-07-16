@@ -4,7 +4,7 @@ from omegaconf import DictConfig
 
 def make_envs(cfg: DictConfig, device: torch.device, seed: int = None) -> tuple:
     if cfg.env.type == "humanoid_bench":
-        from reppo.env_utils.torch_wrappers.humanoid_bench_env import (
+        from src.env_utils.torch_wrappers.humanoid_bench_env import (
             HumanoidBenchEnv,
         )
 
@@ -13,7 +13,7 @@ def make_envs(cfg: DictConfig, device: torch.device, seed: int = None) -> tuple:
         )
         return envs, envs
     elif cfg.env.type == "isaaclab":
-        from reppo.env_utils.torch_wrappers.isaaclab_env import IsaacLabEnv
+        from src.env_utils.torch_wrappers.isaaclab_env import IsaacLabEnv
 
         envs = IsaacLabEnv(
             cfg.env.name,
@@ -24,7 +24,7 @@ def make_envs(cfg: DictConfig, device: torch.device, seed: int = None) -> tuple:
         )
         return envs, envs
     elif cfg.env.type == "mjx":
-        from reppo.env_utils.torch_wrappers.mujoco_playground_env import make_env
+        from src.env_utils.torch_wrappers.mujoco_playground_env import make_env
 
         # TODO: Check if re-using same envs for eval could reduce memory usage
         envs, eval_envs = make_env(
@@ -43,7 +43,7 @@ def make_envs(cfg: DictConfig, device: torch.device, seed: int = None) -> tuple:
         from mani_skill.utils import gym_utils
         from mani_skill.utils.wrappers.flatten import FlattenActionSpaceWrapper
         from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
-        from reppo.env_utils.torch_wrappers.maniskill_wrapper import (
+        from src.env_utils.torch_wrappers.maniskill_wrapper import (
             ManiSkillWrapper,
         )
 

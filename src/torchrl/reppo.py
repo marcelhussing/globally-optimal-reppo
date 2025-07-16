@@ -12,6 +12,8 @@ from omegaconf import DictConfig, OmegaConf
 
 import wandb
 
+from src.torchrl.reppo_util import EmpiricalNormalization, hl_gauss
+
 try:
     # Required for avoiding IsaacGym import error
     import isaacgym
@@ -28,10 +30,6 @@ from tensordict import TensorDict
 from torch.amp import GradScaler
 from src.torchrl.envs import make_envs
 from src.network_utils.torch_models import Actor, Critic
-from src.torchrl.reppo import (
-    EmpiricalNormalization,
-    hl_gauss,
-)
 
 try:
     import jax.numpy as jnp
@@ -445,10 +443,9 @@ def configure_platform(cfg: DictConfig) -> DictConfig:
 @hydra.main(
     version_base=None,
     config_path="../../config",
-    config_name="sac",
+    config_name="reppo",
 )
 def main(cfg):
-    cfg.hyperparameters = OmegaConf.merge(cfg.hyperparameters, cfg.experiment_overrides)
     cfg = configure_platform(cfg)
     run_name = f"{cfg.env.name}_torch_{cfg.seed}"
 
