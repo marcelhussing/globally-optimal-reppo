@@ -72,7 +72,7 @@ This project is licensed under the MIT License -- see the [LICENSE](LICENSE) fil
 ## Citation
 
 ```bibtex
-@article{seo2025fasttd3,
+@article{voelcker2025relative,
   title     = {Relative Entropy Pathwise Policy Optimization},
   author    = {Voelcker, Claas and Brunnbauer, Axel and Hussing, Marcel and Nauman, Michal and Abbeel, Pieter and Eaton, Eric and Grosu, Radu and Farahmand, Amir-massoud and Gilitschenski, Igor},
   booktitle = {preprint},
