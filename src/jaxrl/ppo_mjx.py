@@ -565,7 +565,6 @@ def make_train_fn(
             num_train_steps % eval_interval != 0
         )
         key, init_key = jax.random.split(key)
-        # TWK ??: We retain the same initial state for each of the seeds across all episodes?
         train_state = jax.vmap(make_init(cfg, env, env_params))(
             jax.random.split(init_key, num_seeds)
         )
@@ -578,9 +577,6 @@ def make_train_fn(
 
 
 def plot_history(history: list[dict[str, jax.Array]]):
-    """
-    TODO -- TWK: Possibly remove this...
-    """
     steps = jnp.array([m["time_step"][0] for m in history])
     eval_return = jnp.array([m["eval/episode_return"].mean() for m in history])
     eval_return_std = jnp.array([m["eval/episode_return"].std() for m in history])
@@ -692,10 +688,6 @@ def run(cfg: DictConfig):
 
 
 def tune(cfg: DictConfig):
-    """
-    TODO: Signature + also adjusting to run tuning for Brax environments as well
-    """
-
     def log_callback(state, metrics):
         episode_return = metrics["eval/episode_return"].mean()
         t = state.time_steps[0]

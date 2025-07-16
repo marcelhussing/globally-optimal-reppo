@@ -29,7 +29,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from fast_sac_utils import (
+from src.torchrl.reppo_util import (
     EmpiricalNormalization,
     PerTaskRewardNormalizer,
     RewardNormalizer,
@@ -90,7 +90,7 @@ def main():
     print(f"Using device: {device}")
 
     if args.env_name.startswith("h1hand-") or args.env_name.startswith("h1-"):
-        from reppo.env_utils.torch_wrappers.humanoid_bench_env import (
+        from src.env_utils.torch_wrappers.humanoid_bench_env import (
             HumanoidBenchEnv,
         )
 
@@ -98,7 +98,7 @@ def main():
         envs = HumanoidBenchEnv(args.env_name, args.num_envs, device=device)
         eval_envs = envs
     elif args.env_name.startswith("Isaac-"):
-        from reppo.env_utils.torch_wrappers.isaaclab_env import IsaacLabEnv
+        from src.env_utils.torch_wrappers.isaaclab_env import IsaacLabEnv
 
         env_type = "isaaclab"
         envs = IsaacLabEnv(
@@ -110,14 +110,14 @@ def main():
         )
         eval_envs = envs
     elif args.env_name.startswith("MTBench-"):
-        from reppo.env_utils.torch_wrappers.mtbench_env import MTBenchEnv
+        from src.env_utils.torch_wrappers.mtbench_env import MTBenchEnv
 
         env_name = "-".join(args.env_name.split("-")[1:])
         env_type = "mtbench"
         envs = MTBenchEnv(env_name, args.device_rank, args.num_envs, args.seed)
         eval_envs = envs
     else:
-        from reppo.env_utils.torch_wrappers.mujoco_playground_env import make_env
+        from src.env_utils.torch_wrappers.mujoco_playground_env import make_env
 
         # TODO: Check if re-using same envs for eval could reduce memory usage
         env_type = "mujoco_playground"
@@ -198,7 +198,7 @@ def main():
 
     if args.agent == "fasttd3":
         if env_type in ["mtbench"]:
-            from reppo.network_utils.fast_td3_nets import (
+            from src.network_utils.fast_td3_nets import (
                 MultiTaskActor,
                 MultiTaskCritic,
             )
@@ -206,7 +206,7 @@ def main():
             actor_cls = MultiTaskActor
             critic_cls = MultiTaskCritic
         else:
-            from reppo.network_utils.fast_td3_nets import Actor, Critic
+            from src.network_utils.fast_td3_nets import Actor, Critic
 
             actor_cls = Actor
             critic_cls = Critic
@@ -214,7 +214,7 @@ def main():
         print("Using FastTD3")
     elif args.agent == "fasttd3_simbav2":
         if env_type in ["mtbench"]:
-            from reppo.network_utils.fast_td3_nets_simbav2 import (
+            from src.network_utils.fast_td3_nets_simbav2 import (
                 MultiTaskActor,
                 MultiTaskCritic,
             )
@@ -222,7 +222,7 @@ def main():
             actor_cls = MultiTaskActor
             critic_cls = MultiTaskCritic
         else:
-            from reppo.network_utils.fast_td3_nets_simbav2 import Actor, Critic
+            from src.network_utils.fast_td3_nets_simbav2 import Actor, Critic
 
             actor_cls = Actor
             critic_cls = Critic
