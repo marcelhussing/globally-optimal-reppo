@@ -17,15 +17,15 @@ from jax.random import PRNGKey
 from omegaconf import DictConfig, OmegaConf
 
 import wandb
-from reppo.env_utils.jax_wrappers import (
+from src.env_utils.jax_wrappers import (
     BraxGymnaxWrapper,
     ClipAction,
     LogWrapper,
     MjxGymnaxWrapper,
     NormalizeVec,
 )
-from reppo.jaxrl import utils
-from reppo.network_utils.jax_models import (
+from src.jaxrl import utils
+from src.network_utils.jax_models import (
     CategoricalCriticNetwork,
     CriticNetwork,
     SACActorNetworks,
@@ -928,10 +928,8 @@ def run(cfg: DictConfig, trial: optuna.Trial | None) -> float:
     return (0.1 * sweep_metrics_array.mean() + sweep_metrics_array[:, -1].mean()).item()
 
 
-@hydra.main(version_base=None, config_path="../../config", config_name="sac")
+@hydra.main(version_base=None, config_path="../../config", config_name="reppo")
 def main(cfg: DictConfig):
-    cfg.hyperparameters = OmegaConf.merge(cfg.hyperparameters, cfg.experiment_overrides)
-
     run(cfg, trial=None)
 
 

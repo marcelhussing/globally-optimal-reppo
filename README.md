@@ -17,7 +17,7 @@ We strongly recommend using the [uv tool](https://docs.astral.sh/uv/getting-star
 
 With uv installed, you can install the project and all dependencies in a local virtual environment under `.venv` with one single command:
 ```bash 
-uv init
+uv sync
 ```
 
 Our installation requires a GPU with CUDA 12 compatible drivers.
@@ -36,7 +36,7 @@ pip install -e .
 
 ## Running Experiments
 
-The main code for the algorithm is in `reppo/jaxrl/reppo.py` and `reppo/torchrl/reppo.py` respectively.
+The main code for the algorithm is in `src/reppo_jax/reppo.py` and `src/torchrl/reppo.py` respectively.
 In our tests, both versions produce similar returns up to seed variance.
 However, due to slight variations in the frameworks, we cannot always guarantee this.
 
@@ -46,7 +46,7 @@ This can result in cases where the GPU is stalled if the CPU cannot provide inst
 
 Our configurations are handled with [hydra.cc](https://hydra.cc/). This means parameters can be overwritten by using the syntax
 ```bash
-python reppo/jaxrl/reppo.py PARAMETER=VALUE
+python src/reppo_jax/reppo.py PARAMETER=VALUE
 ```
 
 By default, the environment type and name need to be provided.
@@ -55,11 +55,6 @@ The torch version support `env=mjx_dmc`, and `env=maniskill`. We additionally pr
 
 The paper experiments can be reproduced easily by using the `experiment_override` settings.
 By specifying `experiment_override=mjx_smc_small_data` for example, you can run the variant of REPPO with a batch size of 32k samples.
-
-> [!important]
->  Note that by default, `experiment_override` overrides any parameters in the default config. This means if you specify `hyperparameters.num_steps=64 experiment_override=mjx_smc_small_data`, the number of steps will be 32.
-> To appropriately set the number of steps, you would have to specify `experiment_override.hyperparameters.num_steps=64 experiment_override=mjx_smc_small_data`.
-> In general, we recommend using the experiment overrides only when reproducing paper experiments.
 
 ## Contributing
 

@@ -4,7 +4,7 @@ from torch.distributions import constraints
 from torch.distributions.transforms import Transform
 from torch.distributions.normal import Normal
 
-from reppo.torchrl.reppo import hl_gauss
+from src.torchrl.reppo import hl_gauss
 
 
 class TanhTransform(Transform):

@@ -26,9 +26,9 @@ import torch.optim as optim
 from torchinfo import summary
 from tensordict import TensorDict
 from torch.amp import GradScaler
-from reppo.torchrl.envs import make_envs
-from reppo.network_utils.torch_models import Actor, Critic
-from reppo.torchrl.reppo import (
+from src.torchrl.envs import make_envs
+from src.network_utils.torch_models import Actor, Critic
+from src.torchrl.reppo import (
     EmpiricalNormalization,
     hl_gauss,
 )
