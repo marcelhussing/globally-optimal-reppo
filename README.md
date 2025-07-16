@@ -36,7 +36,7 @@ pip install -e .
 
 ## Running Experiments
 
-The main code for the algorithm is in `src/reppo_jax/reppo.py` and `src/torchrl/reppo.py` respectively.
+The main code for the algorithm is in `src/jaxrl/reppo.py` and `src/torchrl/reppo.py` respectively.
 In our tests, both versions produce similar returns up to seed variance.
 However, due to slight variations in the frameworks, we cannot always guarantee this.
 
@@ -46,7 +46,7 @@ This can result in cases where the GPU is stalled if the CPU cannot provide inst
 
 Our configurations are handled with [hydra.cc](https://hydra.cc/). This means parameters can be overwritten by using the syntax
 ```bash
-python src/reppo_jax/reppo.py PARAMETER=VALUE
+python src/jaxrl/reppo.py PARAMETER=VALUE
 ```
 
 By default, the environment type and name need to be provided.
