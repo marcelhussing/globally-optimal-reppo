@@ -16,7 +16,7 @@ Our repo provides you with the core algorithm and the following features:
 We strongly recommend using the [uv tool](https://docs.astral.sh/uv/getting-started/installation/) for python dependency management.
 
 With uv installed, you can install the project and all dependencies in a local virtual environment under `.venv` with one single command:
-```bash
+```bash 
 uv init
 ```
 
@@ -27,9 +27,11 @@ If you use other dependency management tools such as conda, create a new environ
 pip install -e .
 ```
 
-**⚠️ Note:** Several mujoco_playground environments, such as the Humanoid tasks, are currently unstable. If environments result in nans, we have simply rerun our experiments manually. As soon as these issues are solved upstream, we will update our dependencies.
+> [!Note]
+> Several mujoco_playground environments, such as the Humanoid tasks, are currently unstable. If environments result in nans, we have simply rerun our experiments manually. As soon as these issues are solved upstream, we will update our dependencies.
 
-**⚠️ Note:** To provide a level comparison with prior work, we depend on the FastTD3 for of mujoco_playground. As soon as proper terminal state observation handling is merged into the main repository, we will update our dependencies.
+> [!NOTE]
+>  To provide a level comparison with prior work, we depend on the FastTD3 for of mujoco_playground. As soon as proper terminal state observation handling is merged into the main repository, we will update our dependencies.
 
 
 ## Running Experiments
@@ -54,9 +56,10 @@ The torch version support `env=mjx_dmc`, and `env=maniskill`. We additionally pr
 The paper experiments can be reproduced easily by using the `experiment_override` settings.
 By specifying `experiment_override=mjx_smc_small_data` for example, you can run the variant of REPPO with a batch size of 32k samples.
 
-⚠️: Note that by default, `experiment_override` overrides any parameters in the default config. This means if you specify `hyperparameters.num_steps=64 experiment_override=mjx_smc_small_data`, the number of steps will be 32.
-To appropriately set the number of steps, you would have to specify `experiment_override.hyperparameters.num_steps=64 experiment_override=mjx_smc_small_data`.
-In general, we recommend using the experiment overrides only when reproducing paper experiments.
+> [!important]
+>  Note that by default, `experiment_override` overrides any parameters in the default config. This means if you specify `hyperparameters.num_steps=64 experiment_override=mjx_smc_small_data`, the number of steps will be 32.
+> To appropriately set the number of steps, you would have to specify `experiment_override.hyperparameters.num_steps=64 experiment_override=mjx_smc_small_data`.
+> In general, we recommend using the experiment overrides only when reproducing paper experiments.
 
 ## Contributing
 
@@ -66,9 +69,8 @@ We welcome contributions! Please feel free to submit issues and pull requests.
 
 This project is licensed under the MIT License -- see the [LICENSE](LICENSE) file for details. The repository is built on prior code from the [PureJaxRL](https://github.com/luchris429/purejaxrl) and [FastTD3](https://github.com/younggyoseo/FastTD3) projects, and we thank the respective authors for making their work available in open-source. We include the appropriate licences in ours.
 
-## Citations
+## Citation
 
-### FastTD3
 ```bibtex
 @article{seo2025fasttd3,
   title     = {Relative Entropy Pathwise Policy Optimization},
