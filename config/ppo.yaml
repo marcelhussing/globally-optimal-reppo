@@ -1,7 +1,5 @@
 defaults:
   - env: brax
-  - experiment_overrides: default
-  - trial_spec: default
   - _self_
 
 hyperparameters:
