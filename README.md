@@ -1,4 +1,6 @@
-# Relative Entropy Pathwise Policy Optimization -- On-policy value-based reinforcement learning without endless hyperparameter tuning
+# Relative Entropy Pathwise Policy Optimization 
+
+## On-policy value-based reinforcement learning without endless hyperparameter tuning
 
 This repository contains the official implementation for REPPO - Relative Entropy Pathwise Policy Optimization [arXiv paper link](https://arxiv.org/abs/2507.11019).
 
