@@ -17,25 +17,21 @@ from jax.random import PRNGKey
 from omegaconf import DictConfig, OmegaConf
 
 import wandb
-from src.env_utils.jax_wrappers import (
+from reppo_alg.env_utils.jax_wrappers import (
     BraxGymnaxWrapper,
     ClipAction,
     LogWrapper,
     MjxGymnaxWrapper,
     NormalizeVec,
 )
-from src.jaxrl import utils
-from src.network_utils.jax_models import (
+from reppo_alg.jaxrl import utils, muon
+from reppo_alg.network_utils.jax_models import (
     CategoricalCriticNetwork,
     CriticNetwork,
     SACActorNetworks,
 )
 
 logging.basicConfig(level=logging.INFO)
-
-import mujoco
-
-print(mujoco.__file__)
 
 
 class Policy(typing.Protocol):
@@ -242,14 +238,16 @@ def make_init(
 
         if cfg.max_grad_norm is not None:
             actor_optimizer = optax.chain(
-                optax.clip_by_global_norm(cfg.max_grad_norm), optax.adam(lr)
+                optax.clip_by_global_norm(cfg.max_grad_norm),
+                muon.muon(lr),  # optax.adam(lr) optax.adam(lr)
             )
             critic_optimizer = optax.chain(
-                optax.clip_by_global_norm(cfg.max_grad_norm), optax.adam(lr)
+                optax.clip_by_global_norm(cfg.max_grad_norm),
+                muon.muon(lr),  # optax.adam(lr) optax.adam(lr)
             )
         else:
-            actor_optimizer = optax.adam(lr)
-            critic_optimizer = optax.adam(lr)
+            actor_optimizer = muon.muon(lr)  # optax.adam(lr)
+            critic_optimizer = muon.muon(lr)  # optax.adam(lr)
 
         actor_trainstate = nnx.TrainState.create(
             graphdef=nnx.graphdef(actor_networks),
@@ -282,14 +280,6 @@ def make_init(
         ).astype(jnp.float32)
         env_state.set_env_state(_env_state)
 
-        # mock_action = jnp.zeros(
-        #     (1, 6), dtype=jnp.float32
-        # )
-        # print(mock_action.shape)
-        # print(obs.shape)
-        # print(nnx.tabulate(critic_networks, obs[:1], mock_action))
-        # print(nnx.tabulate(actor_networks, obs[:1]))
-
         return SACTrainState(
             actor=actor_trainstate,
             actor_target=actor_target_trainstate,
@@ -318,7 +308,6 @@ def make_train_fn(
     # env = VecEnv(env, cfg.num_envs)
     if cfg.normalize_env:
         env = NormalizeVec(env)
-    print(env)
     eval_fn = make_eval_fn(env, cfg.max_episode_steps, reward_scale=reward_scale)
     action_size_target = (
         jnp.prod(jnp.array(env.action_space(env_params).shape)) * cfg.ent_target_mult
@@ -452,12 +441,10 @@ def make_train_fn(
             reverse=True,
         )
         # Reshape data to (num_steps * num_envs, ...)
-        jax.debug.print("num trunc {}", batch.truncated.sum(), ordered=True)
         data = (batch, target_values)
         data = jax.tree.map(
             lambda x: x.reshape((cfg.num_steps * cfg.num_envs, *x.shape[2:])), data
         )
-        # jax.debug.print("whole data {}", data[0].truncated.sum(), ordered=True)
 
         train_state = train_state.replace(
             actor_target=train_state.actor_target.replace(

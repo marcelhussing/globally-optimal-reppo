@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 from flax import nnx
 
-from src.jaxrl import utils
+from reppo_alg.jaxrl import utils
 
 
 def torch_he_uniform(

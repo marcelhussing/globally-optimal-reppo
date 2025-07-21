@@ -1,6 +1,5 @@
 import jax
 from mujoco_playground import registry, wrapper_torch
-import torch
 
 jax.config.update("jax_compilation_cache_dir", "/tmp/jax_cache")
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
@@ -70,7 +69,7 @@ class RandomizeInitialWrapper(wrapper_torch.RSLRLBraxWrapper):
             self.key, self.env_state.info["steps"].shape, 0, 1000
         ).astype(jax.numpy.float32)
         return obs, critic_obs
-    
+
     def step(self, action):
         obs, reward, done, info = super().step(action)
         return obs, reward, done, done, info

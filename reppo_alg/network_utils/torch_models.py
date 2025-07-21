@@ -4,7 +4,7 @@ from torch.distributions import constraints
 from torch.distributions.transforms import Transform
 from torch.distributions.normal import Normal
 
-from src.torchrl.reppo_util import hl_gauss
+from reppo_alg.torchrl.reppo import hl_gauss
 
 
 class TanhTransform(Transform):
@@ -34,7 +34,9 @@ class TanhTransform(Transform):
     codomain = constraints.interval(-1.0, 1.0)
     bijective = True
     sign = +1
-    log2 = torch.log(torch.tensor(2.0)).to("cuda" if torch.cuda.is_available() else "cpu")
+    log2 = torch.log(torch.tensor(2.0)).to(
+        "cuda" if torch.cuda.is_available() else "cpu"
+    )
 
     def __eq__(self, other):
         return isinstance(other, TanhTransform)

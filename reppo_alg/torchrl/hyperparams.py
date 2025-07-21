@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import tyro
 
 
-@dataclass    
+@dataclass
 class BaseArgs:
     # Default hyperparameters -- specifically for HumanoidBench
     # See MuJoCoPlaygroundArgs for default hyperparameters for MuJoCo Playground
@@ -153,7 +153,6 @@ def get_args():
         "h1hand-basketball-v0": H1HandBasketballArgs,
         "h1hand-window-v0": H1HandWindowArgs,
         "h1hand-package-v0": H1HandPackageArgs,
-        "h1hand-truck-v0": H1HandTruckArgs,
         # MuJoCo Playground
         # NOTE: These tasks are not full list of MuJoCo Playground tasks
         "G1JoystickFlatTerrain": G1JoystickFlatTerrainArgs,
@@ -276,13 +275,6 @@ class H1HandPackageArgs(HumanoidBenchArgs):
 
 
 @dataclass
-class H1HandTruckArgs(HumanoidBenchArgs):
-    env_name: str = "h1hand-truck-v0"
-    v_min: float = -1000.0
-    v_max: float = 1000.0
-
-
-@dataclass
 class MuJoCoPlaygroundArgs(BaseArgs):
     # Default hyperparameters for many of Playground environments
     v_min: float = -150.0
@@ -291,6 +283,7 @@ class MuJoCoPlaygroundArgs(BaseArgs):
     num_envs: int = 1024
     num_eval_envs: int = 1024
     gamma: float = 0.99
+
 
 @dataclass
 class MTBenchArgs(BaseArgs):

@@ -52,13 +52,13 @@ class DistributionalQNetwork(nn.Module):
         )
         target_z = target_z.clamp(self.v_min, self.v_max)
         b = (target_z - self.v_min) / delta_z
-        l = torch.floor(b).long()
+        low = torch.floor(b).long()
         u = torch.ceil(b).long()
 
-        l_mask = torch.logical_and((u > 0), (l == u))
-        u_mask = torch.logical_and((l < (self.num_atoms - 1)), (l == u))
+        l_mask = torch.logical_and((u > 0), (low == u))
+        u_mask = torch.logical_and((low < (self.num_atoms - 1)), (low == u))
 
-        l = torch.where(l_mask, l - 1, l)
+        low = torch.where(l_mask, low - 1, low)
         u = torch.where(u_mask, u + 1, u)
 
         next_dist = F.softmax(self.forward(obs, actions), dim=1)
@@ -72,10 +72,10 @@ class DistributionalQNetwork(nn.Module):
             .long()
         )
         proj_dist.view(-1).index_add_(
-            0, (l + offset).view(-1), (next_dist * (u.float() - b)).view(-1)
+            0, (low + offset).view(-1), (next_dist * (u.float() - b)).view(-1)
         )
         proj_dist.view(-1).index_add_(
-            0, (u + offset).view(-1), (next_dist * (b - l.float())).view(-1)
+            0, (u + offset).view(-1), (next_dist * (b - low.float())).view(-1)
         )
         return proj_dist
 

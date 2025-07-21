@@ -12,7 +12,7 @@ from omegaconf import DictConfig, OmegaConf
 
 import wandb
 
-from src.torchrl.reppo_util import EmpiricalNormalization, hl_gauss
+from reppo_alg.torchrl.reppo import EmpiricalNormalization, hl_gauss
 
 try:
     # Required for avoiding IsaacGym import error
@@ -28,13 +28,8 @@ import torch.optim as optim
 from torchinfo import summary
 from tensordict import TensorDict
 from torch.amp import GradScaler
-from src.torchrl.envs import make_envs
-from src.network_utils.torch_models import Actor, Critic
-
-try:
-    import jax.numpy as jnp
-except ImportError:
-    pass
+from reppo_alg.torchrl.envs import make_envs
+from reppo_alg.network_utils.torch_models import Actor, Critic
 
 
 torch.set_float32_matmul_precision("medium")
@@ -484,11 +479,11 @@ def main(cfg):
     envs, eval_envs = make_envs(cfg=cfg, device=device, seed=cfg.seed)
 
     n_act = envs.num_actions
-    n_obs = envs.num_obs if type(envs.num_obs) == int else envs.num_obs[0]
+    n_obs = envs.num_obs if isinstance(envs.num_obs, int) else envs.num_obs[0]
     if envs.asymmetric_obs:
         n_critic_obs = (
             envs.num_privileged_obs
-            if type(envs.num_privileged_obs) == int
+            if isinstance(envs.num_privileged_obs, int)
             else envs.num_privileged_obs[0]
         )
     else:

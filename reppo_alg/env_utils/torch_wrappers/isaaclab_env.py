@@ -3,11 +3,11 @@ from typing import Optional
 import gymnasium as gym
 import torch
 from isaaclab.app import AppLauncher
+from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
 
 app_launcher = AppLauncher(headless=True)
 simulation_app = app_launcher.app
 
-from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
 
 
 class IsaacLabEnv:
