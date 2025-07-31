@@ -1,4 +1,3 @@
-# @package _global_
 hyperparameters:
   gamma: 0.97
   critic_hidden_dim: 1024

@@ -23,6 +23,7 @@ def make_envs(cfg: DictConfig, device: torch.device, seed: int = None) -> tuple:
             action_bounds=cfg.env.action_bounds,
         )
         return envs, envs
+
     elif cfg.env.type == "mjx":
         from reppo_alg.env_utils.torch_wrappers.mujoco_playground_env import make_env
 
@@ -37,6 +38,7 @@ def make_envs(cfg: DictConfig, device: torch.device, seed: int = None) -> tuple:
             use_push_randomization=True,
         )
         return envs, eval_envs
+
     elif cfg.env.type == "maniskill":
         import gymnasium as gym
         import mani_skill.envs  # noqa: F401

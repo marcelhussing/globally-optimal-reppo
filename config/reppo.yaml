@@ -1,6 +1,7 @@
 defaults:
   - env: brax
   - platform: torch
+  - experiment_overrides: default
   - _self_
 
 hyperparameters:
@@ -45,11 +46,13 @@ hyperparameters:
   num_critic_head_layers: 2
   num_critic_pred_layers: 2
   use_simplical_embedding: False
+  use_critic_skip: False
 
   # actor architecture settings (seem stable)
   use_actor_norm: true
   num_actor_layers: 3
   actor_min_std: 0.0
+  use_actor_skip: False
 
   # actor & critic loss settings (seem remarkably stable)
   ## kl settings
@@ -58,7 +61,7 @@ hyperparameters:
   reduce_kl: true
   reverse_kl: false # previous default "false"
   update_kl_lagrangian: true
-  actor_kl_clip_mode: "clipped" # "full", "clipped", "kl_relu_clipped", "kl_bound_clipped", "value"
+  actor_kl_clip_mode: "full" # "full", "clipped", "kl_relu_clipped", "kl_bound_clipped", "value"
   ## entropy settings
   ent_start: 0.01
   ent_target_mult: 0.5
@@ -66,9 +69,7 @@ hyperparameters:
   ## auxiliary loss settings
   aux_loss_mult: 1.0
 
-
 measure_burnin: 3
-
 
 name: "sac"
 seed: 0

@@ -24,7 +24,7 @@ from reppo_alg.env_utils.jax_wrappers import (
     MjxGymnaxWrapper,
     NormalizeVec,
 )
-from reppo_alg.jaxrl import utils, muon
+from reppo_alg.jaxrl import utils
 from reppo_alg.network_utils.jax_models import (
     CategoricalCriticNetwork,
     CriticNetwork,
@@ -48,6 +48,7 @@ class Transition(struct.PyTreeNode):
     critic_obs: jax.Array
     action: jax.Array
     reward: jax.Array
+    soft_reward: jax.Array
     next_emb: jax.Array
     value: jax.Array
     done: jax.Array
@@ -93,9 +94,11 @@ class ReppoConfig(struct.PyTreeNode):
     num_critic_head_layers: int = 1
     num_critic_pred_layers: int = 1
     use_simplical_embedding: bool = False
+    use_critic_skip: bool = False
     use_actor_norm: bool = True
     num_actor_layers: int = 2
     actor_min_std: float = 0.05
+    use_actor_skip: bool = False
     reduce_kl: bool = True
     reverse_kl: bool = False
     anneal_lr: bool = False
@@ -188,6 +191,7 @@ def make_init(
             kl_start=cfg.kl_start,
             use_norm=cfg.use_actor_norm,
             layers=cfg.num_actor_layers,
+            use_skip=cfg.use_actor_skip,
             rngs=nnx.Rngs(model_key),
         )
         actor_target_networks = SACActorNetworks(
@@ -198,6 +202,7 @@ def make_init(
             kl_start=cfg.kl_start,
             use_norm=cfg.use_actor_norm,
             layers=cfg.num_actor_layers,
+            use_skip=cfg.use_actor_skip,
             rngs=nnx.Rngs(model_key),
         )
 
@@ -214,6 +219,7 @@ def make_init(
                 use_simplical_embedding=cfg.use_simplical_embedding,
                 head_layers=cfg.num_critic_head_layers,
                 pred_layers=cfg.num_critic_pred_layers,
+                use_skip=cfg.use_critic_skip,
                 rngs=nnx.Rngs(model_key),
             )
         else:
@@ -226,6 +232,7 @@ def make_init(
                 use_simplical_embedding=cfg.use_simplical_embedding,
                 head_layers=cfg.num_critic_head_layers,
                 pred_layers=cfg.num_critic_pred_layers,
+                use_skip=cfg.use_critic_skip,
                 rngs=nnx.Rngs(model_key),
             )
 
@@ -239,15 +246,15 @@ def make_init(
         if cfg.max_grad_norm is not None:
             actor_optimizer = optax.chain(
                 optax.clip_by_global_norm(cfg.max_grad_norm),
-                muon.muon(lr),  # optax.adam(lr) optax.adam(lr)
+                optax.adam(lr)
             )
             critic_optimizer = optax.chain(
                 optax.clip_by_global_norm(cfg.max_grad_norm),
-                muon.muon(lr),  # optax.adam(lr) optax.adam(lr)
+                optax.adam(lr)
             )
         else:
-            actor_optimizer = muon.muon(lr)  # optax.adam(lr)
-            critic_optimizer = muon.muon(lr)  # optax.adam(lr)
+            actor_optimizer = optax.adam(lr)
+            critic_optimizer = optax.adam(lr)
 
         actor_trainstate = nnx.TrainState.create(
             graphdef=nnx.graphdef(actor_networks),
@@ -360,8 +367,8 @@ def make_train_fn(
             next_action, log_prob = actor_model.actor(next_obs).sample_and_log_prob(
                 seed=act_key
             )
-            next_emb, value = critic_model.forward(next_critic_obs, next_action)
-            reward = (
+            next_emb, _, _, value = critic_model.forward(next_critic_obs, next_action)
+            soft_reward = (
                 reward
                 - cfg.gamma * log_prob.sum(-1).squeeze() * actor_model.temperature()
             )
@@ -371,6 +378,7 @@ def make_train_fn(
                 action=action,
                 next_emb=next_emb,
                 reward=reward,
+                soft_reward=soft_reward,
                 value=value,
                 done=done,
                 truncated=next_env_state.truncated,
@@ -415,7 +423,7 @@ def make_train_fn(
             lambda_return, truncated, importance_weight = carry
             # combine importance_weights with TD lambda
             done = transition.done
-            reward = transition.reward
+            reward = transition.soft_reward
             value = transition.value
             lambda_sum = (
                 jnp.exp(importance_weight) * cfg.lmbda * lambda_return
@@ -482,14 +490,16 @@ def make_train_fn(
                         )
 
                     # Aux loss
-                    pred, value = critic_model.forward(
+                    _, pred, pred_rew, value = critic_model.forward(
                         minibatch.critic_obs, minibatch.action
                     )
+                    aux_loss = -optax.cosine_similarity(pred,  minibatch.next_emb)[:, jnp.newaxis]
+                    aux_rew_loss = optax.squared_error(pred_rew, minibatch.reward.reshape(-1, 1))
                     aux_loss = jnp.mean(
                         (1 - minibatch.done.reshape(-1, 1))
-                        * (pred - minibatch.next_emb) ** 2,
-                        axis=-1,
-                    )
+                        * jnp.concatenate(
+                            [aux_loss, aux_rew_loss], axis=-1
+                        ), axis=-1)
 
                     # compute l2 error for logging
                     critic_loss = optax.squared_error(
@@ -506,7 +516,8 @@ def make_train_fn(
                         critic_update_loss=critic_update_loss,
                         loss=loss,
                         aux_loss=aux_loss,
-                        q=critic_pred.mean(),
+                        rew_aux_loss= aux_rew_loss,
+                        q=value.mean(),
                         abs_batch_action=jnp.abs(minibatch.action).mean(),
                         reward_mean=minibatch.reward.mean(),
                         target_values=target_values.mean(),
@@ -917,6 +928,8 @@ def run(cfg: DictConfig, trial: optuna.Trial | None) -> float:
 
 @hydra.main(version_base=None, config_path="../../config", config_name="reppo")
 def main(cfg: DictConfig):
+    print(cfg)
+    cfg.hyperparameters = OmegaConf.merge(cfg.hyperparameters, cfg.experiment_overrides.hyperparameters)
     run(cfg, trial=None)
 
 
