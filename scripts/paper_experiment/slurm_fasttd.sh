@@ -16,7 +16,7 @@
 env=(AcrobotSwingup AcrobotSwingupSparse BallInCup CartpoleBalance CartpoleBalanceSparse CartpoleSwingup CartpoleSwingupSparse CheetahRun FingerSpin FingerTurnEasy FingerTurnHard FishSwim HopperHop HopperStand PendulumSwingup ReacherEasy ReacherHard WalkerRun WalkerWalk WalkerStand HumanoidStand HumanoidWalk HumanoidRun)
 hostname
 
-cd /home/$USER/projects/aip-gigor/voelcker/particle_smoothing_ppo
+cd /home/$USER/projects/aip-gigor/voelcker/reppo
 source .venv/bin/activate
 
 python onpolicy_sac/torchrl/fast_td3.py \

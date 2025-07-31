@@ -17,7 +17,7 @@ env=(AcrobotSwingup AcrobotSwingupSparse BallInCup CartpoleBalance CartpoleBalan
 
 hostname
 
-cd /home/$USER/projects/aip-gigor/voelcker/particle_smoothing_ppo
+cd /home/$USER/projects/aip-gigor/voelcker/reppo
 source .venv/bin/activate
 
 python onpolicy_sac/jaxrl/ppo_mjx.py --config-name=ppo_taylor \

@@ -16,7 +16,7 @@
 env=(G1JoystickFlatTerrain G1JoystickRoughTerrain T1JoystickFlatTerrain T1JoystickRoughTerrain)
 hostname
 
-cd /home/$USER/projects/aip-gigor/voelcker/particle_smoothing_ppo
+cd /home/$USER/projects/aip-gigor/voelcker/reppo
 source .venv/bin/activate
 
 python onpolicy_sac/jaxrl/ppo_mjx.py --config-name=ppo \

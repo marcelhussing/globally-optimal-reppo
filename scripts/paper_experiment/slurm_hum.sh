@@ -16,10 +16,10 @@
 env=(G1JoystickFlatTerrain G1JoystickRoughTerrain T1JoystickFlatTerrain T1JoystickRoughTerrain)
 hostname
 
-cd /home/$USER/projects/aip-gigor/voelcker/particle_smoothing_ppo
+cd /home/$USER/projects/aip-gigor/voelcker/reppo
 source .venv/bin/activate
 
-python onpolicy_sac/jaxrl/sac_online.py --config-name=sac \
+python reppo_alg/jaxrl/reppo.py --config-name=sac \
     env=mjx_humanoid \
     env.name=${env[$((SLURM_ARRAY_TASK_ID%4))]} \
     seed=$RANDOM \
