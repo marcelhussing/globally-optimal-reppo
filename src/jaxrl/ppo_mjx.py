@@ -18,14 +18,14 @@ from jax.random import PRNGKey
 from omegaconf import DictConfig, OmegaConf
 
 import wandb
-from reppo_alg.env_utils.jax_wrappers import (
+from src.env_utils.jax_wrappers import (
     BraxGymnaxWrapper,
     ClipAction,
     LogWrapper,
     MjxGymnaxWrapper,
 )
-from reppo_alg.jaxrl import utils
-from reppo_alg.jaxrl.normalization import NormalizationState, Normalizer
+from src.jaxrl import utils
+from src.jaxrl.normalization import NormalizationState, Normalizer
 
 logging.basicConfig(level=logging.INFO)
 

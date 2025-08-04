@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 from flax import nnx
 
-from reppo_alg.jaxrl import utils
+from src.jaxrl import utils
 
 
 def torch_he_uniform(
@@ -39,7 +39,6 @@ def normed_activation_layer(
         nnx.Linear(
             in_features=in_features,
             out_features=out_features,
-            kernel_init=torch_he_uniform(),
             rngs=rngs,
         )
     ]
@@ -82,10 +81,11 @@ class FCNN(nnx.Module):
         if layers == 1:
             hidden_dim = out_features
         self.input_layer = normed_activation_layer(
-            rngs,            in_features,
+            rngs, 
+            in_features,
             hidden_dim,
             use_norm=use_norm,
-            activation=hidden_activation if input_activation else None,
+            activation=hidden_activation,
         )
         self.main_layers = [
             normed_activation_layer(
@@ -97,6 +97,7 @@ class FCNN(nnx.Module):
             )
             for _ in range(layers - 2)
         ]
+        self.norm = nnx.RMSNorm(in_features, rngs=rngs)
         self.output_layer = normed_activation_layer(
             rngs,
             hidden_dim,
@@ -112,10 +113,11 @@ class FCNN(nnx.Module):
             else:
                 return layer(x)
 
+        if self.input_activation:
+            # x = self.norm(x)
+            x = self.hidden_activation(x)
         if self.layers == 1:
             return _potentially_skip(self.input_skip, x, self.input_layer)
-        if self.input_activation:
-            x = self.hidden_activation(x)
         x = _potentially_skip(self.input_skip, x, self.input_layer)
         for layer in self.main_layers:
             x = _potentially_skip(self.hidden_skip, x, layer)
@@ -146,7 +148,7 @@ class CriticNetwork(nnx.Module):
             hidden_activation=nnx.swish,
             output_activation=utils.multi_softmax if use_simplical_embedding else None,
             use_norm=use_norm,
-            use_output_norm=use_encoder_norm,
+            use_output_norm=False,
             layers=encoder_layers,
             hidden_skip=use_skip,
             output_skip=use_skip,
@@ -161,6 +163,7 @@ class CriticNetwork(nnx.Module):
             use_norm=use_norm,
             use_output_norm=False,
             input_skip=use_skip,
+            input_activation=not use_simplical_embedding,
             hidden_skip=use_skip,
             layers=head_layers,
             rngs=rngs,
@@ -176,6 +179,7 @@ class CriticNetwork(nnx.Module):
             input_skip=use_skip,
             hidden_skip=use_skip,
             output_skip=False,
+            input_activation=not use_simplical_embedding,
             layers=pred_layers,
             rngs=rngs,
         )
@@ -200,8 +204,8 @@ class CriticNetwork(nnx.Module):
         value = self.critic_head(features)
         pred = self.pred_module(features)
         pred_rew = pred[..., :1]
-        pred_features = pred[..., 1:] + features
-        return pred_features, pred_rew, value
+        pred_features = pred[..., 1:]
+        return features, pred_features, pred_rew, value.squeeze(-1)
 
 
 class CategoricalCriticNetwork(nnx.Module):
@@ -212,7 +216,6 @@ class CategoricalCriticNetwork(nnx.Module):
         hidden_dim: int = 512,
         project_discrete_action: bool = False,
         use_norm: bool = True,
-        use_encoder_norm: bool = False,
         use_simplical_embedding: bool = False,
         encoder_layers: int = 1,
         head_layers: int = 1,
@@ -244,9 +247,9 @@ class CategoricalCriticNetwork(nnx.Module):
             out_features=hidden_dim,
             hidden_dim=hidden_dim,
             hidden_activation=nnx.swish,
-            output_activation=utils.multi_softmax if use_simplical_embedding else None,
+            output_activation=None,
             use_norm=use_norm,
-            use_output_norm=use_encoder_norm,
+            use_output_norm=False,
             layers=encoder_layers,
             hidden_skip=use_skip,
             output_skip= use_skip,
@@ -273,7 +276,7 @@ class CategoricalCriticNetwork(nnx.Module):
             hidden_activation=nnx.swish,
             output_activation=None,
             use_norm=use_norm,
-            use_output_norm=utils.multi_softmax if use_simplical_embedding else None,
+            use_output_norm=None,
             layers=pred_layers,
             input_activation=not use_simplical_embedding,
             input_skip=use_skip,
@@ -281,6 +284,7 @@ class CategoricalCriticNetwork(nnx.Module):
             output_skip=False,
             rngs=rngs,
         )
+
         self.zero_dist = nnx.Param(
             utils.hl_gauss(jnp.zeros((1,)), num_bins, vmin, vmax)
         )
@@ -311,8 +315,9 @@ class CategoricalCriticNetwork(nnx.Module):
         value = value_cat.dot(
             jnp.linspace(self.vmin, self.vmax, self.num_bins, endpoint=True)
         )
-        pred_rew = self.pred_module(features)[..., :1]
-        pred_features = self.pred_module(features)[..., 1:]
+        preds = self.pred_module(features)
+        pred_rew = preds[..., :1]
+        pred_features = preds[..., 1:]
         if self.use_skip:
             pred_features = pred_features + features
         return features, pred_features, pred_rew, value
@@ -457,77 +462,3 @@ class SACDiscreteActorNetworks(nnx.Module):
         loc = self.actor_module(obs)
         loc, std = jnp.split(loc, 2, axis=-1)
         return jnp.tanh(loc), std, self.temperature(), self.lagrangian()
-
-
-
-class TD3ActorNetworks(nnx.Module):
-    def __init__(
-        self,
-        obs_dim: int,
-        action_dim: int,
-        hidden_dim: int = 512,
-        ent_start: float = 0.1,
-        kl_start: float = 0.1,
-        use_norm: bool = True,
-        layers: int = 2,
-        min_std: float = 0.1,
-        use_skip: bool = False,
-        *,
-        rngs: nnx.Rngs,
-    ):
-        self.actor_module = FCNN(
-            in_features=obs_dim,
-            out_features=action_dim * 2,
-            hidden_dim=hidden_dim,
-            hidden_activation=nnx.swish,
-            output_activation=None,
-            use_norm=use_norm,
-            use_output_norm=False,
-            layers=layers,
-            input_activation=False,
-            input_skip=False,
-            hidden_skip=use_skip,
-            rngs=rngs,
-        )
-        start_value = math.log(ent_start)
-        kl_start_value = math.log(kl_start)
-        self.temperature_log_param = nnx.Param(jnp.ones(1) * start_value)
-        self.lagrangian_log_param = nnx.Param(jnp.ones(1) * kl_start_value)
-        self.min_std = min_std
-
-    def actor(
-        self, obs: jax.Array, scale: float | jax.Array = 1.0
-    ) -> distrax.Distribution:
-        loc = self.actor_module(obs)
-        loc, log_std = jnp.split(loc, 2, axis=-1)
-        std = (jnp.exp(log_std) + self.min_std) * scale
-        pi = distrax.Transformed(distrax.Normal(loc=loc, scale=std), distrax.Tanh())
-        return pi
-
-    def det_action(self, obs: jax.Array) -> jax.Array:
-        loc = self.actor_module(obs)
-        loc, _ = jnp.split(loc, 2, axis=-1)
-        return jnp.tanh(loc)
-
-    def temperature(self) -> jax.Array:
-        return jnp.exp(self.temperature_log_param.value)
-
-    def lagrangian(self) -> jax.Array:
-        return jnp.exp(self.lagrangian_log_param.value)
-
-
-class TD3DeterministicDist(distrax.Distribution):
-    def __init__(self, loc: jax.Array, scale: float | jax.Array):
-        self.loc = loc
-        self.scale = scale
-
-    def sample(self, seed=None):
-        return self.loc + self.scale * jax.random.normal(seed, self.loc.shape)
-
-    def log_prob(self, value: jax.Array) -> jax.Array:
-        return jnp.zeros_like(value)
-
-    def sample_and_log_prob(self, *, seed, sample_shape=...):
-        sample = self.sample(seed=seed)
-        log_prob = self.log_prob(sample)
-        return sample, log_prob

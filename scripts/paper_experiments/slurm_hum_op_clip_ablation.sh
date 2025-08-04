@@ -10,7 +10,7 @@
 #SBATCH --job-name=mpsac_val
 #SBATCH --output=slurm_logs/slurm_mjx_op_%A_%a.out
 #SBATCH --error=slurm_logs/slurm_mjx_op_%A_%a.err
-#SBATCH --exclude=kn038,kn109,kn123
+#SBATCH --exclude=kn104,kn115,kn146,kn153
 #SBATCH --array=0-15%4
 
 env=(G1JoystickFlatTerrain G1JoystickRoughTerrain T1JoystickFlatTerrain T1JoystickRoughTerrain)
@@ -19,11 +19,11 @@ hostname
 cd /home/$USER/projects/aip-gigor/voelcker/reppo
 source .venv/bin/activate
 
-python reppo_alg/jaxrl/reppo.py --config-name=sac \
+python src/jaxrl/reppo.py --config-name=reppo \
 	env=mjx_humanoid \
     env.name=${env[$((SLURM_ARRAY_TASK_ID%4))]} \
 	seed=$RANDOM \
 	tune=false \
 	experiment_overrides=$3 \
 	hyperparameters.actor_kl_clip_mode=$4 \
-	tags=[paper_iclr,$4,$5]
+	tags=[paper_adamw,$4,$5]

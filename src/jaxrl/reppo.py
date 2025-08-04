@@ -17,15 +17,15 @@ from jax.random import PRNGKey
 from omegaconf import DictConfig, OmegaConf
 
 import wandb
-from reppo_alg.env_utils.jax_wrappers import (
+from src.env_utils.jax_wrappers import (
     BraxGymnaxWrapper,
     ClipAction,
     LogWrapper,
     MjxGymnaxWrapper,
     NormalizeVec,
 )
-from reppo_alg.jaxrl import utils
-from reppo_alg.network_utils.jax_models import (
+from src.jaxrl import utils
+from src.networks.jax_models import (
     CategoricalCriticNetwork,
     CriticNetwork,
     SACActorNetworks,
@@ -485,15 +485,15 @@ def make_train_fn(
                         )
                     else:
                         critic_update_loss = optax.squared_error(
-                            critic_pred,
-                            target_values,
+                            critic_pred.reshape(-1,1),
+                            target_values.reshape(-1,1),
                         )
 
                     # Aux loss
                     _, pred, pred_rew, value = critic_model.forward(
                         minibatch.critic_obs, minibatch.action
                     )
-                    aux_loss = -optax.cosine_similarity(pred,  minibatch.next_emb)[:, jnp.newaxis]
+                    aux_loss = optax.squared_error(pred,  minibatch.next_emb)
                     aux_rew_loss = optax.squared_error(pred_rew, minibatch.reward.reshape(-1, 1))
                     aux_loss = jnp.mean(
                         (1 - minibatch.done.reshape(-1, 1))
@@ -898,7 +898,7 @@ def run(cfg: DictConfig, trial: optuna.Trial | None) -> float:
                 *cfg.tags,
             ],
             config=OmegaConf.to_container(cfg),
-            name=f"resampling-{cfg.name}-{cfg.env.name.lower()}",
+            name=f"{cfg.name}-{cfg.env.name.lower()}",
             save_code=True,
         )
 
