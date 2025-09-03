@@ -12,7 +12,7 @@ from omegaconf import DictConfig, OmegaConf
 
 import wandb
 
-from src.torchrl.reppo import EmpiricalNormalization, hl_gauss
+from src.torchrl.reppo_util import EmpiricalNormalization, hl_gauss
 
 try:
     # Required for avoiding IsaacGym import error
@@ -29,7 +29,7 @@ from torchinfo import summary
 from tensordict import TensorDict
 from torch.amp import GradScaler
 from src.torchrl.envs import make_envs
-from src.network_utils.torch_models import Actor, Critic
+from src.networks.torch_models import Actor, Critic
 
 
 torch.set_float32_matmul_precision("medium")
