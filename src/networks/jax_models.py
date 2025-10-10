@@ -125,22 +125,24 @@ class FCNN(nnx.Module):
 
 
 class CriticNetwork(nnx.Module):
+    @nnx.vmap(in_axes=(0, None, None, None, None, None, None, None, None, None, None, None, 0))
     def __init__(
         self,
         obs_dim: int,
         action_dim: int,
-        hidden_dim: int = 512,
-        project_discrete_action: bool = False,
-        use_norm: bool = True,
-        use_encoder_norm: bool = False,
-        use_simplical_embedding: bool = False,
-        encoder_layers: int = 1,
-        head_layers: int = 1,
-        pred_layers: int = 1,
-        use_skip=False,
-        *,
-        rngs: nnx.Rngs,
-    ):
+        hidden_dim: int,
+        project_discrete_action: bool,
+        use_norm: bool,
+        use_encoder_norm: bool,
+        use_simplical_embedding: bool,
+        encoder_layers: int,
+        head_layers: int,
+        pred_layers: int,
+        use_skip,
+        rngs,
+    ):        
+        rngs = nnx.Rngs(rngs)
+
         self.feature_module = FCNN(
             in_features=obs_dim + action_dim,
             out_features=hidden_dim,
@@ -188,17 +190,21 @@ class CriticNetwork(nnx.Module):
         state = jnp.concatenate([obs, action], axis=-1)
         return self.feature_module(state)
 
+    @nnx.vmap
     def critic_head(self, features: jax.Array) -> jax.Array:
         return self.critic_module(features)
 
+    @nnx.vmap
     def critic(self, obs: jax.Array, action: jax.Array) -> jax.Array:
         features = self.features(obs, action)
         return self.critic_head(features)
 
+    @nnx.vmap
     def critic_cat(self, obs: jax.Array, action: jax.Array) -> jax.Array:
         features = self.features(obs, action)
         return self.critic_head(features)
 
+    @nnx.vmap
     def forward(self, obs, action):
         features = self.features(obs, action)
         value = self.critic_head(features)
@@ -209,24 +215,25 @@ class CriticNetwork(nnx.Module):
 
 
 class CategoricalCriticNetwork(nnx.Module):
+    @nnx.vmap(in_axes=(0, None, None, None, None, None, None, None, None, None, None, None, None, None, 0))
     def __init__(
         self,
         obs_dim: int,
         action_dim: int,
-        hidden_dim: int = 512,
-        project_discrete_action: bool = False,
-        use_norm: bool = True,
-        use_simplical_embedding: bool = False,
-        encoder_layers: int = 1,
-        head_layers: int = 1,
-        pred_layers: int = 1,
-        num_bins: int = 51,
-        vmin: float = -10.0,
-        vmax: float = 10.0,
-        use_skip: bool = False,
-        *,
+        hidden_dim: int,
+        project_discrete_action: bool,
+        use_norm: bool,
+        use_simplical_embedding: bool,
+        encoder_layers: int,
+        head_layers: int,
+        pred_layers: int,
+        num_bins: int,
+        vmin: float,
+        vmax: float,
+        use_skip: bool,
         rngs: nnx.Rngs,
     ):
+        rngs = nnx.Rngs(rngs)
         self.num_bins = num_bins
         self.vmin = vmin
         self.vmax = vmax
@@ -298,10 +305,12 @@ class CategoricalCriticNetwork(nnx.Module):
         cat = self.critic_module(features) + self.zero_dist.value * 40.0
         return cat
 
+    @nnx.vmap
     def critic_cat(self, obs: jax.Array, action: jax.Array) -> jax.Array:
         features = self.features(obs, action)
         return self.critic_head(features)
 
+    @nnx.vmap
     def critic(self, obs: jax.Array, action: jax.Array) -> jax.Array:
         value_cat = jax.nn.softmax(self.critic_cat(obs, action), axis=-1)
         value = value_cat.dot(
@@ -309,6 +318,7 @@ class CategoricalCriticNetwork(nnx.Module):
         )
         return value
 
+    @nnx.vmap
     def forward(self, obs, action):
         features = self.features(obs, action)
         value_cat = jax.nn.softmax(self.critic_head(features), axis=-1)
@@ -324,20 +334,21 @@ class CategoricalCriticNetwork(nnx.Module):
 
 
 class SACActorNetworks(nnx.Module):
+    @nnx.vmap(in_axes=(0, None, None, None, None, None, None, None, None, None, 0)) 
     def __init__(
         self,
         obs_dim: int,
         action_dim: int,
-        hidden_dim: int = 512,
-        ent_start: float = 0.1,
-        kl_start: float = 0.1,
-        use_norm: bool = True,
-        layers: int = 2,
-        min_std: float = 0.1,
-        use_skip: bool = False,
-        *,
+        hidden_dim: int,
+        ent_start: float,
+        kl_start: float,
+        use_norm: bool,
+        layers: int,
+        min_std: float,
+        use_skip: bool,
         rngs: nnx.Rngs,
     ):
+        rngs = nnx.Rngs(rngs)
         self.actor_module = FCNN(
             in_features=obs_dim,
             out_features=action_dim * 2,
@@ -357,26 +368,31 @@ class SACActorNetworks(nnx.Module):
         self.lagrangian_log_param = nnx.Param(jnp.ones(1) * kl_start_value)
         self.min_std = min_std
 
+    @nnx.vmap
     def actor(
-        self, obs: jax.Array, scale: float | jax.Array = 1.0
+        self, obs: jax.Array
     ) -> distrax.Distribution:
         loc = self.actor_module(obs)
         loc, log_std = jnp.split(loc, 2, axis=-1)
-        std = (jnp.exp(log_std) + self.min_std) * scale
+        std = (jnp.exp(log_std) + self.min_std) 
         pi = distrax.Transformed(distrax.Normal(loc=loc, scale=std), distrax.Tanh())
         return pi
 
+    @nnx.vmap
     def det_action(self, obs: jax.Array) -> jax.Array:
         loc = self.actor_module(obs)
         loc, _ = jnp.split(loc, 2, axis=-1)
         return jnp.tanh(loc)
 
+    @nnx.vmap
     def temperature(self) -> jax.Array:
         return jnp.exp(self.temperature_log_param.value)
 
+    @nnx.vmap
     def lagrangian(self) -> jax.Array:
         return jnp.exp(self.lagrangian_log_param.value)
 
+    @nnx.vmap
     def __call__(self, obs: jax.Array) -> jax.Array:
         loc = self.actor_module(obs)
         loc, std = jnp.split(loc, 2, axis=-1)
