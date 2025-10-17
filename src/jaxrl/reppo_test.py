@@ -106,6 +106,7 @@ class ReppoConfig(struct.PyTreeNode):
     anneal_lr: bool = False
     actor_kl_clip_mode: str = "clipped"
     num_policies: int = 1
+    use_max_ensembling: bool = False
 
 
 class SACTrainState(struct.PyTreeNode):
@@ -134,18 +135,34 @@ def make_eval_fn(
     env: Environment, max_episode_steps: int, reward_scale: float = 1.0
 ) -> Callable[[jax.random.PRNGKey, Policy, PyTreeNode | None], dict[str, float]]:
     def evaluation_fn(
-        key: jax.random.PRNGKey, policy: Policy, norm_state: PyTreeNode | None, num_policies: int
+        key: jax.random.PRNGKey, 
+        policy: Policy, 
+        critic,
+        norm_state: PyTreeNode | None, 
+        num_policies: int, 
+        use_max_ensembling: bool = False
     ):
         def step_env(carry, _):
             key, env_state, obs = carry
             key, act_key, env_key = jax.random.split(key, 3)
-            obs = obs.reshape(
-                (num_policies, obs.shape[0] // num_policies, *obs.shape[1:])
-            )
-            action, _ = policy(act_key, obs)
-            action = action.reshape(
-                (action.shape[0] * action.shape[1], *action.shape[2:])
-            )
+            
+            if use_max_ensembling:
+                obs = obs[None, ...]
+                obs = jnp.repeat(obs, num_policies, axis=0)
+                act_key = jax.random.split(act_key, num_policies)
+                action, _ = policy(act_key, obs)
+                values = critic.critic(obs, action).squeeze(-1) # shape (num_policies, num_envs)
+                best_policy_idx = jnp.argmax(values, axis=0)  # shape (num_envs,)
+                action = action[best_policy_idx, jnp.arange(action.shape[1])]
+            else:
+                obs = obs.reshape(
+                    (num_policies, obs.shape[0] // num_policies, *obs.shape[1:])
+                )
+                action, _ = policy(act_key, obs)
+                action = action.reshape(
+                    (action.shape[0] * action.shape[1], *action.shape[2:])
+                )
+
             step_key = jax.random.split(env_key, env.num_envs)
             obs, _, env_state, reward, done, info = env.step(
                 step_key, env_state, action
@@ -805,7 +822,7 @@ def make_train_fn(
                 norm_state = train_state.last_env_state
             else:
                 norm_state = None
-            eval_metrics = eval_fn(eval_key, policy, norm_state, cfg.num_policies)
+            eval_metrics = eval_fn(eval_key, policy, critic, norm_state, cfg.num_policies, cfg.use_max_ensembling)
             train_returns = {
                 "train/episode_return": train_state.last_env_state.info[
                     "returned_episode_returns"
