@@ -75,6 +75,8 @@ class ReppoConfig(struct.PyTreeNode):
     exploration_base_envs: int
     ent_start: float
     ent_target_mult: float
+    ent_target_mult_min: float
+    ent_target_mult_max: float
     kl_start: float
     eval_interval: int = 10
     num_eval: int = 25
@@ -103,7 +105,7 @@ class ReppoConfig(struct.PyTreeNode):
     reverse_kl: bool = False
     anneal_lr: bool = False
     actor_kl_clip_mode: str = "clipped"
-    num_policies: int = 2
+    num_policies: int = 1
 
 
 class SACTrainState(struct.PyTreeNode):
@@ -132,13 +134,13 @@ def make_eval_fn(
     env: Environment, max_episode_steps: int, reward_scale: float = 1.0
 ) -> Callable[[jax.random.PRNGKey, Policy, PyTreeNode | None], dict[str, float]]:
     def evaluation_fn(
-        key: jax.random.PRNGKey, policy: Policy, norm_state: PyTreeNode | None
+        key: jax.random.PRNGKey, policy: Policy, norm_state: PyTreeNode | None, num_policies: int
     ):
         def step_env(carry, _):
             key, env_state, obs = carry
             key, act_key, env_key = jax.random.split(key, 3)
             obs = obs.reshape(
-                (act_key.shape[0], obs.shape[0] // act_key.shape[0], *obs.shape[1:])
+                (num_policies, obs.shape[0] // num_policies, *obs.shape[1:])
             )
             action, _ = policy(act_key, obs)
             action = action.reshape(
@@ -326,9 +328,8 @@ def make_train_fn(
     if cfg.normalize_env:
         env = NormalizeVec(env)
     eval_fn = make_eval_fn(env, cfg.max_episode_steps, reward_scale=reward_scale)
-    action_size_target = (
-        jnp.prod(jnp.array(env.action_space(env_params).shape)) * cfg.ent_target_mult
-    )
+    act_space_prod = jnp.prod(jnp.array(env.action_space(env_params).shape))
+    action_size_target = jnp.linspace(cfg.ent_target_mult_min, cfg.ent_target_mult_max, cfg.num_policies)[:, None]
 
     def collect_rollout(
         key: PRNGKey, train_state: SACTrainState
@@ -804,7 +805,7 @@ def make_train_fn(
                 norm_state = train_state.last_env_state
             else:
                 norm_state = None
-            eval_metrics = eval_fn(eval_key, policy, norm_state)
+            eval_metrics = eval_fn(eval_key, policy, norm_state, cfg.num_policies)
             train_returns = {
                 "train/episode_return": train_state.last_env_state.info[
                     "returned_episode_returns"
