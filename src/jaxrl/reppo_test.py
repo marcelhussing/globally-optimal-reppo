@@ -137,7 +137,13 @@ def make_eval_fn(
         def step_env(carry, _):
             key, env_state, obs = carry
             key, act_key, env_key = jax.random.split(key, 3)
+            obs = obs.reshape(
+                (act_key.shape[0], obs.shape[0] // act_key.shape[0], *obs.shape[1:])
+            )
             action, _ = policy(act_key, obs)
+            action = action.reshape(
+                (action.shape[0] * action.shape[1], *action.shape[2:])
+            )
             step_key = jax.random.split(env_key, env.num_envs)
             obs, _, env_state, reward, done, info = env.step(
                 step_key, env_state, action
@@ -251,12 +257,10 @@ def make_init(
 
         if cfg.max_grad_norm is not None:
             actor_optimizer = optax.chain(
-                optax.clip_by_global_norm(cfg.max_grad_norm),
-                optax.adam(lr)
+                optax.clip_by_global_norm(cfg.max_grad_norm), optax.adam(lr)
             )
             critic_optimizer = optax.chain(
-                optax.clip_by_global_norm(cfg.max_grad_norm),
-                optax.adam(lr)
+                optax.clip_by_global_norm(cfg.max_grad_norm), optax.adam(lr)
             )
         else:
             actor_optimizer = optax.adam(lr)
@@ -344,15 +348,19 @@ def make_train_fn(
 
         @nnx.scan(in_axes=nnx.Carry, out_axes=(nnx.Carry, 0), length=cfg.num_steps)
         def step_env(carry) -> tuple[tuple, Transition]:
-            key, env_state, train_state, obs, critic_obs, actor_model, critic_model = carry
+            key, env_state, train_state, obs, critic_obs, actor_model, critic_model = (
+                carry
+            )
             key, act_key, step_key = jax.random.split(key, 3)
             step_key = jax.random.split(step_key, cfg.num_envs)
 
             # get policy action
             original_shape = obs.shape
-            obs = obs.reshape((cfg.num_policies, cfg.num_envs // cfg.num_policies, *obs.shape[1:]))
-            
-            og_pi = actor_model.actor(obs) 
+            obs = obs.reshape(
+                (cfg.num_policies, cfg.num_envs // cfg.num_policies, *obs.shape[1:])
+            )
+
+            og_pi = actor_model.actor(obs)
             pi = actor_model.actor(obs)
             action = pi.sample(seed=act_key)
 
@@ -372,30 +380,64 @@ def make_train_fn(
             )
 
             # compute next state embedding and value
-            next_obs = next_obs.reshape((cfg.num_policies, cfg.num_envs // cfg.num_policies, *next_obs.shape[1:]))
+            next_obs = next_obs.reshape(
+                (
+                    cfg.num_policies,
+                    cfg.num_envs // cfg.num_policies,
+                    *next_obs.shape[1:],
+                )
+            )
             next_action, log_prob = actor_model.actor(next_obs).sample_and_log_prob(
                 seed=act_key
             )
 
-            next_critic_obs = next_critic_obs.reshape((cfg.num_policies, cfg.num_envs // cfg.num_policies, *next_critic_obs.shape[1:]))
+            next_critic_obs = next_critic_obs.reshape(
+                (
+                    cfg.num_policies,
+                    cfg.num_envs // cfg.num_policies,
+                    *next_critic_obs.shape[1:],
+                )
+            )
             next_emb, _, _, value = critic_model.forward(next_critic_obs, next_action)
 
-            reward = reward.reshape((cfg.num_policies, cfg.num_envs // cfg.num_policies, *reward.shape[1:]))
+            reward = reward.reshape(
+                (cfg.num_policies, cfg.num_envs // cfg.num_policies, *reward.shape[1:])
+            )
             soft_reward = (
                 reward
                 - cfg.gamma * log_prob.sum(-1).squeeze() * actor_model.temperature()
             )
 
             obs = obs.reshape((obs.shape[0] * obs.shape[1], *obs.shape[2:]))
-            next_obs = next_obs.reshape((next_obs.shape[0] * next_obs.shape[1], *next_obs.shape[2:]))
-            next_critic_obs = next_critic_obs.reshape((next_critic_obs.shape[0] * next_critic_obs.shape[1], *next_critic_obs.shape[2:]))
-            action = action.reshape((action.shape[0] * action.shape[1], *action.shape[2:]))
-            next_emb = next_emb.reshape((next_emb.shape[0] * next_emb.shape[1], *next_emb.shape[2:]))
-            reward = reward.reshape((reward.shape[0] * reward.shape[1], *reward.shape[2:]))
-            soft_reward = soft_reward.reshape((soft_reward.shape[0] * soft_reward.shape[1], *soft_reward.shape[2:]))
+            next_obs = next_obs.reshape(
+                (next_obs.shape[0] * next_obs.shape[1], *next_obs.shape[2:])
+            )
+            next_critic_obs = next_critic_obs.reshape(
+                (
+                    next_critic_obs.shape[0] * next_critic_obs.shape[1],
+                    *next_critic_obs.shape[2:],
+                )
+            )
+            action = action.reshape(
+                (action.shape[0] * action.shape[1], *action.shape[2:])
+            )
+            next_emb = next_emb.reshape(
+                (next_emb.shape[0] * next_emb.shape[1], *next_emb.shape[2:])
+            )
+            reward = reward.reshape(
+                (reward.shape[0] * reward.shape[1], *reward.shape[2:])
+            )
+            soft_reward = soft_reward.reshape(
+                (soft_reward.shape[0] * soft_reward.shape[1], *soft_reward.shape[2:])
+            )
             value = value.reshape((value.shape[0] * value.shape[1], *value.shape[2:]))
-            importance_weight = importance_weight.reshape((importance_weight.shape[0] * importance_weight.shape[1], *importance_weight.shape[2:]))
-            
+            importance_weight = importance_weight.reshape(
+                (
+                    importance_weight.shape[0] * importance_weight.shape[1],
+                    *importance_weight.shape[2:],
+                )
+            )
+
             transition = Transition(
                 obs=obs,
                 critic_obs=critic_obs,
@@ -409,28 +451,30 @@ def make_train_fn(
                 info=info,
                 importance_weight=importance_weight,
             )
-            return (key,
+            return (
+                key,
                 next_env_state,
                 train_state,
                 next_obs,
                 next_critic_obs,
-                actor_model, 
-                critic_model), transition
+                actor_model,
+                critic_model,
+            ), transition
 
         actor_model = nnx.merge(train_state.actor.graphdef, train_state.actor.params)
         critic_model = nnx.merge(train_state.critic.graphdef, train_state.critic.params)
 
         rollout_state, transitions = step_env(
-            carry=(key,
+            carry=(
+                key,
                 train_state.last_env_state,
                 train_state,
                 train_state.last_obs,
                 train_state.last_critic_obs,
                 actor_model,
-                critic_model
+                critic_model,
             )
         )
-        exit()
 
         _, last_env_state, train_state, last_obs, last_critic_obs, _, _ = rollout_state
         train_state = train_state.replace(
@@ -479,25 +523,33 @@ def make_train_fn(
         # Reshape data to (num_steps * num_envs, ...)
         data = (batch, target_values)
         data = jax.tree.map(
-            lambda x: x.reshape((cfg.num_steps * cfg.num_envs, *x.shape[2:])), data
+            lambda x: x.reshape(
+                (
+                    cfg.num_policies,
+                    cfg.num_steps * cfg.num_envs // cfg.num_policies,
+                    *x.shape[2:],
+                )
+            ),
+            data,
         )
-
         train_state = train_state.replace(
             actor_target=train_state.actor_target.replace(
                 params=train_state.actor.params
             ),
         )
-        actor_target_model = nnx.merge(
-            train_state.actor_target.graphdef, train_state.actor_target.params
-        )
 
         def update(train_state, key) -> tuple[SACTrainState, dict[str, jax.Array]]:
             def minibatch_update(carry, indices):
                 idx, train_state = carry
-                # Sample data at indices from the batch
-                minibatch, target_values = jax.tree.map(
-                    lambda x: jnp.take(x, indices, axis=0), data
-                )
+                minibatch, target_values = jax.vmap(
+                    lambda x_leaf, idx_row: jax.tree_util.tree_map(
+                        lambda a: jnp.take(
+                            a, idx_row, axis=0
+                        ),  # now axis=0 because x_leaf is (N, …)
+                        x_leaf,
+                    ),
+                    in_axes=(0, 0),
+                )(data, indices.astype(jnp.int32))
 
                 def critic_loss_fn(params):
                     critic_model = nnx.merge(train_state.critic.graphdef, params)
@@ -505,38 +557,44 @@ def make_train_fn(
                         minibatch.critic_obs, minibatch.action
                     ).squeeze()
                     if cfg.hl_gauss:
+                        # flatten first dim inside
                         target_cat = jax.vmap(
                             utils.hl_gauss, in_axes=(0, None, None, None)
-                        )(target_values, cfg.num_bins, cfg.vmin, cfg.vmax)
+                        )(target_values.reshape(-1), cfg.num_bins, cfg.vmin, cfg.vmax)
                         critic_update_loss = optax.softmax_cross_entropy(
-                            critic_pred, target_cat
+                            critic_pred.reshape(-1, cfg.num_bins), target_cat
                         )
                     else:
                         critic_update_loss = optax.squared_error(
-                            critic_pred.reshape(-1,1),
-                            target_values.reshape(-1,1),
+                            critic_pred.reshape(-1, 1),
+                            target_values.reshape(-1, 1),
                         )
 
                     # Aux loss
                     _, pred, pred_rew, value = critic_model.forward(
                         minibatch.critic_obs, minibatch.action
                     )
-                    aux_loss = optax.squared_error(pred,  minibatch.next_emb)
-                    aux_rew_loss = optax.squared_error(pred_rew, minibatch.reward.reshape(-1, 1))
+                    aux_loss = optax.squared_error(
+                        pred.reshape(pred.shape[0] * pred.shape[1], -1),
+                        minibatch.next_emb.reshape(pred.shape[0] * pred.shape[1], -1),
+                    )
+                    aux_rew_loss = optax.squared_error(
+                        pred_rew.reshape(-1, 1), minibatch.reward.reshape(-1, 1)
+                    )
                     aux_loss = jnp.mean(
                         (1 - minibatch.done.reshape(-1, 1))
-                        * jnp.concatenate(
-                            [aux_loss, aux_rew_loss], axis=-1
-                        ), axis=-1)
+                        * jnp.concatenate([aux_loss, aux_rew_loss], axis=-1),
+                        axis=-1,
+                    )
 
                     # compute l2 error for logging
                     critic_loss = optax.squared_error(
-                        value,
-                        target_values,
+                        value.reshape(-1, 1),
+                        target_values.reshape(-1, 1),
                     )
                     critic_loss = jnp.mean(critic_loss)
                     loss = jnp.mean(
-                        (1.0 - minibatch.truncated)
+                        (1.0 - minibatch.truncated.reshape(-1))
                         * (critic_update_loss + cfg.aux_loss_mult * aux_loss)
                     )
                     return loss, dict(
@@ -544,7 +602,7 @@ def make_train_fn(
                         critic_update_loss=critic_update_loss,
                         loss=loss,
                         aux_loss=aux_loss,
-                        rew_aux_loss= aux_rew_loss,
+                        rew_aux_loss=aux_rew_loss,
                         q=value.mean(),
                         abs_batch_action=jnp.abs(minibatch.action).mean(),
                         reward_mean=minibatch.reward.mean(),
@@ -558,9 +616,15 @@ def make_train_fn(
                     )
                     actor_model = nnx.merge(train_state.actor.graphdef, params)
 
+                    actor_target_model = nnx.merge(
+                        train_state.actor_target.graphdef,
+                        train_state.actor_target.params,
+                    )
+
                     # SAC actor loss
                     pi = actor_model.actor(minibatch.obs)
                     pred_action, log_prob = pi.sample_and_log_prob(seed=key)
+
                     value = critic_target_model.critic(
                         minibatch.critic_obs, pred_action
                     )
@@ -584,7 +648,6 @@ def make_train_fn(
                             minibatch.obs
                         ).sample_and_log_prob(sample_shape=(16,), seed=key)
                         old_pi_action = jnp.clip(old_pi_action, -1 + 1e-4, 1 - 1e-4)
-
                         old_pi_act_log_prob = old_pi_act_log_prob.sum(-1).mean(0)
                         pi_act_log_prob = pi.log_prob(old_pi_action).sum(-1).mean(0)
 
@@ -671,14 +734,26 @@ def make_train_fn(
 
             # Shuffle data and split into mini-batches
             key, shuffle_key = jax.random.split(key)
-            mini_batch_size = (cfg.num_steps * cfg.num_envs) // cfg.num_mini_batches
-            indices = jax.random.permutation(shuffle_key, cfg.num_steps * cfg.num_envs)
-            minibatch_idxs = jax.tree.map(
-                lambda x: x.reshape(
-                    (cfg.num_mini_batches, mini_batch_size, *x.shape[1:])
-                ),
-                indices,
+            shuffle_keys = jax.random.split(shuffle_key, cfg.num_policies)
+
+            mini_batch_size = (
+                cfg.num_steps * cfg.num_envs // cfg.num_policies
+            ) // cfg.num_mini_batches
+
+            indices = jax.vmap(jax.random.permutation, in_axes=(0, None))(
+                shuffle_keys, cfg.num_steps * cfg.num_envs // cfg.num_policies
             )
+
+            minibatch_idxs = indices.reshape(
+                (
+                    cfg.num_policies,
+                    cfg.num_mini_batches,
+                    mini_batch_size,
+                )
+            )  # (num_policies, num_batches, batch_size)
+            minibatch_idxs = jnp.transpose(
+                minibatch_idxs, (1, 0, 2)
+            )  # (num_batches, num_policies, batch_size)
 
             # Run model update for each mini-batch
             train_state, metrics = jax.lax.scan(
@@ -901,19 +976,6 @@ def run(cfg: DictConfig, trial: optuna.Trial | None) -> float:
     else:
         raise ValueError(f"Unknown environment type: {cfg.env.type}")
 
-    # build algo config with overrides
-    # env = LogWrapper(env, cfg.hyperparameters.num_envs)
-    # env = ClipAction(env)
-    # # env = VecEnv(env, cfg.num_envs)
-    # if cfg.hyperparameters.normalize_env:
-    #     env = NormalizeVec(env)
-
-    # init_fn = make_init(ReppoConfig(**cfg.hyperparameters), env, None)
-    # train_state = init_fn(jax.random.PRNGKey(0))
-
-    # print(train_state)
-    # exit()
-
     train_fn = make_train_fn(
         cfg=ReppoConfig(**cfg.hyperparameters),
         env=env,
@@ -968,7 +1030,9 @@ def run(cfg: DictConfig, trial: optuna.Trial | None) -> float:
 @hydra.main(version_base=None, config_path="../../config", config_name="reppo")
 def main(cfg: DictConfig):
     print(cfg)
-    cfg.hyperparameters = OmegaConf.merge(cfg.hyperparameters, cfg.experiment_overrides.hyperparameters)
+    cfg.hyperparameters = OmegaConf.merge(
+        cfg.hyperparameters, cfg.experiment_overrides.hyperparameters
+    )
     run(cfg, trial=None)
 
 
