@@ -137,7 +137,7 @@ def make_eval_fn(
     def evaluation_fn(
         key: jax.random.PRNGKey, 
         policy: Policy, 
-        critic,
+        train_state,
         norm_state: PyTreeNode | None, 
         num_policies: int, 
         use_max_ensembling: bool = False
@@ -147,11 +147,12 @@ def make_eval_fn(
             key, act_key, env_key = jax.random.split(key, 3)
             
             if use_max_ensembling:
+                critic = nnx.merge(train_state.critic.graphdef, train_state.critic.params)
                 obs = obs[None, ...]
                 obs = jnp.repeat(obs, num_policies, axis=0)
                 act_key = jax.random.split(act_key, num_policies)
                 action, _ = policy(act_key, obs)
-                values = critic.critic(obs, action).squeeze(-1) # shape (num_policies, num_envs)
+                values = critic.critic(obs, action) # shape (num_policies, num_envs)
                 best_policy_idx = jnp.argmax(values, axis=0)  # shape (num_envs,)
                 action = action[best_policy_idx, jnp.arange(action.shape[1])]
             else:
@@ -270,7 +271,7 @@ def make_init(
         if not cfg.anneal_lr:
             lr = cfg.lr
         else:
-            num_iterations = cfg.total_time_steps // cfg.num_steps // cfg.num_envs
+            num_iterations = cfg.total_time_steps // cfg.num_steps // cfg.num_envs 
             num_updates = num_iterations * cfg.num_epochs * cfg.num_mini_batches
             lr = optax.linear_schedule(cfg.lr, 0, num_updates)
 
@@ -351,18 +352,6 @@ def make_train_fn(
     def collect_rollout(
         key: PRNGKey, train_state: SACTrainState
     ) -> tuple[Transition, SACTrainState]:
-        offset = (
-            jnp.arange(cfg.num_envs - cfg.exploration_base_envs)[:, None]
-            * (cfg.exploration_noise_max - cfg.exploration_noise_min)
-            / (cfg.num_envs - cfg.exploration_base_envs)
-        ) + cfg.exploration_noise_min
-        offset = jnp.concatenate(
-            [
-                jnp.ones((cfg.exploration_base_envs, 1)) * cfg.exploration_noise_min,
-                offset,
-            ],
-            axis=0,
-        )
 
         @nnx.scan(in_axes=nnx.Carry, out_axes=(nnx.Carry, 0), length=cfg.num_steps)
         def step_env(carry) -> tuple[tuple, Transition]:
@@ -818,11 +807,12 @@ def make_train_fn(
             )
             train_metrics = jax.tree.map(lambda x: x[-1], train_metrics)
             policy = make_policy(train_state)
+
             if cfg.normalize_env:
                 norm_state = train_state.last_env_state
             else:
                 norm_state = None
-            eval_metrics = eval_fn(eval_key, policy, critic, norm_state, cfg.num_policies, cfg.use_max_ensembling)
+            eval_metrics = eval_fn(eval_key, policy, train_state, norm_state, cfg.num_policies, cfg.use_max_ensembling)
             train_returns = {
                 "train/episode_return": train_state.last_env_state.info[
                     "returned_episode_returns"
