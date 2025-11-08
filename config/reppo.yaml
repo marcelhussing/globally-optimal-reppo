@@ -71,6 +71,7 @@ hyperparameters:
   ## auxiliary loss settings
   aux_loss_mult: 1.0
   num_policies: 1
+  use_max_ensembling: false
 
 measure_burnin: 3
 

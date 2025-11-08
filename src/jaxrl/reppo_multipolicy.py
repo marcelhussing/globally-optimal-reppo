@@ -135,23 +135,25 @@ def make_eval_fn(
     env: Environment, max_episode_steps: int, reward_scale: float = 1.0
 ) -> Callable[[jax.random.PRNGKey, Policy, PyTreeNode | None], dict[str, float]]:
     def evaluation_fn(
-        key: jax.random.PRNGKey, 
-        policy: Policy, 
+        key: jax.random.PRNGKey,
+        policy: Policy,
         critic,
-        norm_state: PyTreeNode | None, 
-        num_policies: int, 
-        use_max_ensembling: bool = False
+        norm_state: PyTreeNode | None,
+        num_policies: int,
+        use_max_ensembling: bool = False,
     ):
         def step_env(carry, _):
             key, env_state, obs = carry
             key, act_key, env_key = jax.random.split(key, 3)
-            
+
             if use_max_ensembling:
                 obs = obs[None, ...]
                 obs = jnp.repeat(obs, num_policies, axis=0)
                 act_key = jax.random.split(act_key, num_policies)
                 action, _ = policy(act_key, obs)
-                values = critic.critic(obs, action).squeeze(-1) # shape (num_policies, num_envs)
+                values = critic.critic(obs, action).squeeze(
+                    -1
+                )  # shape (num_policies, num_envs)
                 best_policy_idx = jnp.argmax(values, axis=0)  # shape (num_envs,)
                 action = action[best_policy_idx, jnp.arange(action.shape[1])]
             else:
@@ -181,22 +183,36 @@ def make_eval_fn(
             length=max_episode_steps,
         )
 
-        return {
-            "episode_return": infos["returned_episode_returns"].mean(
-                where=infos["returned_episode"]
-            )
-            * reward_scale,
-            "episode_return_std": infos["returned_episode_returns"].std(
-                where=infos["returned_episode"]
-            ),
-            "episode_length": infos["returned_episode_lengths"].mean(
-                where=infos["returned_episode"]
-            ),
-            "episode_length_std": infos["returned_episode_lengths"].std(
-                where=infos["returned_episode"]
-            ),
+        ep_ret_selected = (
+            infos["returned_episode_returns"] * infos["returned_episode"]
+        ).sum(0)
+        ep_len_selected = (
+            infos["returned_episode_lengths"] * infos["returned_episode"]
+        ).sum(0)
+
+        # create base return dict
+        return_dict = {
+            "episode_return": ep_ret_selected.mean() * reward_scale,
+            "episode_return_std": ep_ret_selected.std(),
+            "episode_length": ep_len_selected.mean(),
+            "episode_length_std": ep_len_selected.std(),
             "num_episodes": infos["returned_episode"].sum(),
         }
+
+        # add per policy returns to return dict by reshaping and looping
+        # over all policies
+        ep_ret_selected = ep_ret_selected.reshape(
+            (
+                num_policies,
+                ep_ret_selected.shape[0] // num_policies,
+            )
+        )
+        for i in range(num_policies):
+            return_dict[f"policy/episode_return_{i}"] = (
+                ep_ret_selected[i].mean() * reward_scale
+            )
+
+        return return_dict
 
     return evaluation_fn
 
@@ -346,7 +362,9 @@ def make_train_fn(
         env = NormalizeVec(env)
     eval_fn = make_eval_fn(env, cfg.max_episode_steps, reward_scale=reward_scale)
     act_space_prod = jnp.prod(jnp.array(env.action_space(env_params).shape))
-    action_size_target = jnp.linspace(cfg.ent_target_mult_min, cfg.ent_target_mult_max, cfg.num_policies)[:, None]
+    action_size_target = jnp.linspace(
+        cfg.ent_target_mult_min, cfg.ent_target_mult_max, cfg.num_policies
+    )[:, None]
 
     def collect_rollout(
         key: PRNGKey, train_state: SACTrainState
@@ -777,6 +795,7 @@ def make_train_fn(
             train_state, metrics = jax.lax.scan(
                 minibatch_update, train_state, minibatch_idxs
             )
+
             # Compute mean metrics across mini-batches
             metrics = jax.tree.map(lambda x: x.mean(0), metrics)
             return train_state, metrics
@@ -818,19 +837,37 @@ def make_train_fn(
             )
             train_metrics = jax.tree.map(lambda x: x[-1], train_metrics)
             policy = make_policy(train_state)
+            critic = nnx.merge(train_state.critic.graphdef, train_state.critic.params)
+
             if cfg.normalize_env:
                 norm_state = train_state.last_env_state
             else:
                 norm_state = None
-            eval_metrics = eval_fn(eval_key, policy, critic, norm_state, cfg.num_policies, cfg.use_max_ensembling)
+            eval_metrics = eval_fn(
+                eval_key,
+                policy,
+                critic,
+                norm_state,
+                cfg.num_policies,
+                cfg.use_max_ensembling,
+            )
+
+            ep_ret = train_state.last_env_state.info["returned_episode_returns"]
+            ep_length = train_state.last_env_state.info["returned_episode_lengths"]
+
             train_returns = {
-                "train/episode_return": train_state.last_env_state.info[
-                    "returned_episode_returns"
-                ].mean(),
-                "train/episode_length": train_state.last_env_state.info[
-                    "returned_episode_lengths"
-                ].mean(),
+                "train/episode_return": ep_ret.mean(),
+                "train/episode_length": ep_length.mean(),
             }
+
+            per_policy_returns = ep_ret.reshape(
+                (cfg.num_policies, ep_ret.shape[0] // cfg.num_policies)
+            )
+            for i in range(cfg.num_policies):
+                train_returns[f"train_per_policy/episode_return_{i}"] = (
+                    per_policy_returns[i].mean()
+                )
+
             metrics = {
                 "time_step": train_state.time_steps,
                 **utils.prefix_dict("train", train_metrics),
@@ -974,6 +1011,31 @@ def run(cfg: DictConfig, trial: optuna.Trial | None) -> float:
             **jax.tree.map(jnp.mean, utils.filter_prefix("train", metrics)),
         }
         wandb.log(log_data, step=state.time_steps[0])
+
+        num_policies = cfg.hyperparameters.num_policies
+        for i in range(num_policies):
+            wandb.log(
+                {
+                    f"train_per_policy/episode_return_{i}": metrics[
+                        f"train_per_policy/episode_return_{i}"
+                    ]
+                },
+                step=state.time_steps[0],
+            )
+            wandb.log(
+                {
+                    f"eval_per_policy/episode_return_{i}": metrics[
+                        f"eval/policy/episode_return_{i}"
+                    ]
+                },
+                step=state.time_steps[0],
+            )
+
+        # log timestep / num_policies
+        wandb.log(
+            {"misc/time_step_per_policy": state.time_steps[0] // num_policies},
+            step=state.time_steps[0],
+        )
 
     # Set up the experiment
     if cfg.env.type == "brax":
