@@ -147,6 +147,7 @@ def make_eval_fn(
             key, act_key, env_key = jax.random.split(key, 3)
 
             if use_max_ensembling:
+                critic = nnx.merge(train_state.critic.graphdef, train_state.critic.params)
                 obs = obs[None, ...]
                 obs = jnp.repeat(obs, num_policies, axis=0)
                 act_key = jax.random.split(act_key, num_policies)
@@ -286,7 +287,7 @@ def make_init(
         if not cfg.anneal_lr:
             lr = cfg.lr
         else:
-            num_iterations = cfg.total_time_steps // cfg.num_steps // cfg.num_envs
+            num_iterations = cfg.total_time_steps // cfg.num_steps // cfg.num_envs 
             num_updates = num_iterations * cfg.num_epochs * cfg.num_mini_batches
             lr = optax.linear_schedule(cfg.lr, 0, num_updates)
 
@@ -369,18 +370,6 @@ def make_train_fn(
     def collect_rollout(
         key: PRNGKey, train_state: SACTrainState
     ) -> tuple[Transition, SACTrainState]:
-        offset = (
-            jnp.arange(cfg.num_envs - cfg.exploration_base_envs)[:, None]
-            * (cfg.exploration_noise_max - cfg.exploration_noise_min)
-            / (cfg.num_envs - cfg.exploration_base_envs)
-        ) + cfg.exploration_noise_min
-        offset = jnp.concatenate(
-            [
-                jnp.ones((cfg.exploration_base_envs, 1)) * cfg.exploration_noise_min,
-                offset,
-            ],
-            axis=0,
-        )
 
         @nnx.scan(in_axes=nnx.Carry, out_axes=(nnx.Carry, 0), length=cfg.num_steps)
         def step_env(carry) -> tuple[tuple, Transition]:
